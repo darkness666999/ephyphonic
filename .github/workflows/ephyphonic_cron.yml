@@ -9,4 +9,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Orquestrator Cron Waker
-        run: curl -X GET "https://ephyphonic-hybu.vercel.app/api/cron/worker"
+        run: 'curl -X GET "https://ephyphonic-hybu.vercel.app/api/worker" -H "Accept: application/json"'
