@@ -37,3 +37,5 @@ class handler(BaseHTTPRequestHandler):
             self.send_response(500)
             self.end_headers()
             self.wfile.write(f"Error: {str(e)}".encode())
+        
+        #Cron work based on vercel scheduler, runs every 10 minutes, so we can have a good telemetry trough redis, and also clean old logs and celery task meta keys to avoid memory bloat.

@@ -15,7 +15,7 @@ def get_status():
         
         return {
             "status": "online",
-            "project": "Serverless Orquestrator",
+            "project": "Ephyphonic",
             "owner": "Angelo Araya",
             "last_events": logs_decoded
         }
