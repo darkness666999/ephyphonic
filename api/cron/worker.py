@@ -17,7 +17,7 @@ try:
 except Exception:
     r = None
 
-@app.get("/api/cron/worker")
+@app.get("/")
 def do_worker():
     if r is None:
         return {"status": "error", "message": "Redis not initialized. Check REDIS_URL."}
