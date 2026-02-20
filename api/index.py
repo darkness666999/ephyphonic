@@ -103,13 +103,13 @@ def get_status(request: Request):
         return JSONResponse(content={"status": "error", "message": str(e)}, status_code=500)
     
 @app.get("/api/worker")
-def do_worker():
+def do_worker(request: Request):
     if r is None:
-        return {"status": "error", "message": "Redis not initialized. Check REDIS_URL."}
+        return JSONResponse(content={"status": "error", "message": "Redis not initialized."}, status_code=500)
     
     target = os.getenv("TARGET_URL")
     if not target:
-        return {"status": "error", "message": "TARGET_URL not configured."}
+        return JSONResponse(content={"status": "error", "message": "TARGET_URL not configured."}, status_code=500)
     
     try:
         start_time = time.time()
@@ -125,12 +125,40 @@ def do_worker():
         week_ago = now_ts - (7 * 24 * 60 * 60)
         num_del = r.zremrangebyscore("orchestrator_telemetry", "-inf", week_ago)
 
+        accept = request.headers.get("accept", "")
+        if "text/html" in accept:
+            return HTMLResponse(content=f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <script src="https://cdn.tailwindcss.com"></script>
+                <title>Worker Execution</title>
+            </head>
+            <body class="bg-slate-900 text-slate-200 flex items-center justify-center min-h-screen p-4">
+                <div class="bg-slate-800 border border-emerald-500/30 p-8 rounded-2xl shadow-2xl max-w-md w-full text-center">
+                    <div class="mb-4 inline-flex items-center justify-center w-16 h-16 bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/50">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                    </div>
+                    <h1 class="text-2xl font-bold text-white mb-2">Worker Executed</h1>
+                    <p class="text-slate-400 mb-6 italic text-sm">"{log_msg}"</p>
+                    <div class="flex flex-col gap-3">
+                        <a href="/api" class="bg-blue-600 hover:bg-blue-500 text-white py-2 px-4 rounded-lg font-medium transition-colors text-sm">
+                            Go to Dashboard
+                        </a>
+                        <span class="text-xs text-slate-500">Deleted {num_del} expired logs</span>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """)
+
         return {
             "status": "success",
-            "message": "Log guardado",
             "entry": log_msg,
             "deleted_old": num_del
         }
 
     except Exception as e:
-        return {"status": "error", "message": f"Execution failure: {str(e)}"}
+        return JSONResponse(content={"status": "error", "message": str(e)}, status_code=500)
