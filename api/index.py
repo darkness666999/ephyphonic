@@ -63,7 +63,12 @@ def get_status(request: Request):
                     <h1 class="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
                         Ephyphonic Orchestrator
                     </h1>
-                    <span class="px-3 py-1 bg-emerald-500/20 text-emerald-400 rounded-full text-sm border border-emerald-500/50">System Online</span>
+                    <div class="flex items-center gap-4">
+                        <a href="/api/worker" class="text-xs bg-blue-600 hover:bg-blue-500 text-white py-1.5 px-3 rounded-lg transition-colors font-medium">
+                            ▶ Run Worker
+                        </a>
+                        <span class="px-3 py-1 bg-emerald-500/20 text-emerald-400 rounded-full text-sm border border-emerald-500/50">System Online</span>
+                    </div>
                 </header>
 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
@@ -144,8 +149,8 @@ def do_worker(request: Request):
                     <h1 class="text-2xl font-bold text-white mb-2">Worker Executed</h1>
                     <p class="text-slate-400 mb-6 italic text-sm">"{log_msg}"</p>
                     <div class="flex flex-col gap-3">
-                        <a href="/api" class="bg-blue-600 hover:bg-blue-500 text-white py-2 px-4 rounded-lg font-medium transition-colors text-sm">
-                            Go to Dashboard
+                        <a href="/api" class="bg-blue-600 hover:bg-blue-500 text-white py-3 px-4 rounded-xl font-bold transition-all shadow-lg shadow-blue-900/20 active:scale-95">
+                            ← Back to Dashboard
                         </a>
                         <span class="text-xs text-slate-500">Deleted {num_del} expired logs</span>
                     </div>
