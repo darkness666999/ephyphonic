@@ -1,0 +1,12 @@
+name: Ephyphonic Heartbeat
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Orquestrator Cron Waker
+        run: curl -X GET "ephyphonic-hybu-qp8gabx5p-angeloarayas-projects.vercel.app"
