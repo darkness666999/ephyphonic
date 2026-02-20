@@ -1,39 +1,51 @@
-from http.server import BaseHTTPRequestHandler
 import os
-import requests
 import redis
 import time
-from datetime import datetime, timedelta
+import requests
+from datetime import datetime
+from fastapi import FastAPI
 
-class handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        r = redis.from_url(os.getenv("REDIS_URL"))
-        target = os.getenv("TARGET_URL")
+app = FastAPI()
+
+try:
+    r = redis.from_url(
+        os.getenv("REDIS_URL"), 
+        decode_responses=True,
+        socket_connect_timeout=5,
+        ssl_cert_reqs=None 
+    )
+except Exception:
+    r = None
+
+@app.get("/api/cron/worker")
+def do_worker():
+    if r is None:
+        return {"status": "error", "message": "Redis not initialized. Check REDIS_URL."}
+    
+    target = os.getenv("TARGET_URL")
+    if not target:
+        return {"status": "error", "message": "TARGET_URL not configured."}
+    
+    try:
+        start_time = time.time()
+        response = requests.get(target, timeout=10)
+        latency = round((time.time() - start_time) * 1000, 2)
         
-        try:
-            start_time = time.time()
-            response = requests.get(target, timeout=10)
-            latency = round((time.time() - start_time) * 1000, 2)
-            
-            now_ts = time.time()
-            ahora_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            
-            log_msg = f"{ahora_str} | Status: {response.status_code} | {latency}ms"
-            r.zadd("orchestrator_telemetry", {log_msg: now_ts})
+        now_ts = time.time()
+        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        log_msg = f"{now_str} | Status: {response.status_code} | {latency}ms"
+        
+        r.zadd("orchestrator_telemetry", {log_msg: now_ts})
+        
+        week_ago = now_ts - (7 * 24 * 60 * 60)
+        num_del = r.zremrangebyscore("orchestrator_telemetry", "-inf", week_ago)
 
-            week = now_ts - (7 * 24 * 60 * 60)
-            
-            num_del = r.zremrangebyscore("orchestrator_telemetry", "-inf", week)
+        return {
+            "status": "success",
+            "message": "Log guardado",
+            "entry": log_msg,
+            "deleted_old": num_del
+        }
 
-            system_keys = r.keys("celery-task-meta-*")
-            if system_keys:
-                r.delete(*system_keys)
-
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(f"OK. Log saved. Deleted {num_del} old entries.".encode())
-
-        except Exception as e:
-            self.send_response(500)
-            self.end_headers()
-            self.wfile.write(f"Error: {str(e)}".encode()) 
+    except Exception as e:
+        return {"status": "error", "message": f"Execution failure: {str(e)}"}
