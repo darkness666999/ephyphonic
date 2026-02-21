@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 import os
 import redis
 import time
@@ -15,7 +15,10 @@ r = redis.from_url(REDIS_URL)
 def read_root():
     return """
     <html>
-        <head><title>Ephyphonic Orchestrator</title></head>
+        <head>
+            <title>Ephyphonic Orchestrator</title>
+            <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+        </head>
         <body style="font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #0f172a; color: white;">
             <div style="text-align: center; border: 1px solid #334155; padding: 2rem; border-radius: 1rem; background: #1e293b;">
                 <h1>🚀 Ephyphonic System</h1>
@@ -26,10 +29,13 @@ def read_root():
     </html>
     """
 
+@app.get("/favicon.svg", include_in_schema=False)
+def favicon():
+    return FileResponse("api/ephyphonic.svg", media_type="image/svg+xml")
+
 @app.get("/api")
 def get_status(request: Request):
     try:
-        # 1. Obtener datos de Redis
         logs = r.zrevrange("orchestrator_telemetry", 0, -1)
         logs_decoded = [log.decode('utf-8') for log in logs]
         
@@ -42,12 +48,10 @@ def get_status(request: Request):
             "last_events": logs_decoded
         }
 
-        # 2. Verificar si el usuario pide JSON (API) o HTML (Navegador)
         accept = request.headers.get("accept", "")
         if "text/html" not in accept:
             return JSONResponse(content=data)
 
-        # 3. HTML "Beautified" para el Dashboard
         log_items = "".join([f"<li class='border-b border-slate-700 py-2 font-mono text-sm text-blue-300'>{log}</li>" for log in logs_decoded])
         
         html_content = f"""
@@ -55,6 +59,7 @@ def get_status(request: Request):
         <html>
         <head>
             <title>Ephyphonic Dashboard</title>
+            <link rel="icon" type="image/svg+xml" href="/favicon.svg">
             <script src="https://cdn.tailwindcss.com"></script>
         </head>
         <body class="bg-slate-900 text-slate-200 min-h-screen p-8">
@@ -135,9 +140,10 @@ def do_worker(request: Request):
             return HTMLResponse(content=f"""
             <!DOCTYPE html>
             <html>
-            <head>
-                <script src="https://cdn.tailwindcss.com"></script>
+            <head>                
                 <title>Worker Execution</title>
+                <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+                <script src="https://cdn.tailwindcss.com"></script>
             </head>
             <body class="bg-slate-900 text-slate-200 flex items-center justify-center min-h-screen p-4">
                 <div class="bg-slate-800 border border-emerald-500/30 p-8 rounded-2xl shadow-2xl max-w-md w-full text-center">
