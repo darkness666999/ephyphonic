@@ -234,11 +234,11 @@ def render_dashboard(logs_decoded, data, filters):
                     if(filters.status) filters.status = parseInt(filters.status);
                     if(filters.latencyGt) filters.latencyGt = parseFloat(filters.latencyGt);
 
-                    const response = await fetch('/api', {{
+                    const response = await fetch('/api', {{{{
                         method: 'POST',
-                        headers: {'Content-Type': 'application/json', 'Accept': 'text/html'},
-                        body: JSON.stringify({{filters}})
-                    }});
+                        headers: {{{{'Content-Type': 'application/json', 'Accept': 'text/html'}}}},
+                        body: JSON.stringify({{{{filters}}}})
+                    }}}});
                     const html = await response.text();
                     document.open();
                     document.write(html);
