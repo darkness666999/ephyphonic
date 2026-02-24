@@ -2,7 +2,7 @@ import time
 import requests
 import os
 from datetime import datetime
-#This file is to tregger the Ephyphonic API every 10 minutes, and log the results in Windows Event Log for monitoring.
+#This file is to trigger the Ephyphonic API every 10 minutes, and log the results in Windows Event Log for monitoring.
 URL = "https://ephyphonic-hybu.vercel.app/api/worker"
 INTERVAL = 600 # 10 minutes
 APP_NAME = "EphyphonicTrigger"

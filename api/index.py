@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Query
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 import json
 import os
@@ -34,59 +34,145 @@ def read_root():
 def favicon():
     return FileResponse("api/ephyphonic.svg", media_type="image/svg+xml")
 
-@app.get("/api")
-def get_status(request: Request):
+@app.get("/api", methods=["GET", "POST"])
+async def get_status(request: Request):
+
+    filters = {}
+
+    if request.method == "POST":
+        body = await request.json()
+        filters = body.get("filters", {})
+    
     try:
         logs = r.zrevrange("orchestrator_telemetry", 0, -1)
         logs_decoded = []
 
         for raw in logs:
-            raw = raw.decode("utf-8")
+            log = parse_log(raw)
 
-            try:
-                parsed = json.loads(raw)
-                logs_decoded.append(parsed)
-            except:
-                logs_decoded.append({
-                    "legacy": True,
-                    "raw": raw
-        })
-        
-        data = {
-            "status": "online",
-            "project": "Ephyphonic",
-            "owner": "Angelo Araya",
-            "retention": "7_days",
-            "total_logs": len(logs_decoded),
-            "last_events": logs_decoded
-        }
+            if apply_filters(log, filters):
+                logs_decoded.append(log)
+
+        data = build_dashboard_data(logs_decoded)
 
         accept = request.headers.get("accept", "")
+
         if "text/html" not in accept:
             return JSONResponse(content=data)
-
-        log_items = ""
-
-        for log in logs_decoded:
-            if "legacy" in log:
-                display = log["raw"]
-                status_code = None
-            else:
-                display = f"{log['timestamp']} | Status: {log['status']} | {log['latency']}ms"
-                status_code = log["status"]
-
-            color = "text-blue-300"
-
-            if status_code and status_code >= 500:
-                color = "text-red-400"
-            elif status_code and status_code >= 400:
-                color = "text-yellow-400"
-
-            log_items += f"<li class='border-b border-slate-700 py-2 font-mono text-sm {color}'>{display}</li>"
         
-        html_content = f"""
-        <!DOCTYPE html>
-        <html>
+        return HTMLResponse(content=render_dashboard(logs_decoded, data, filters))
+    except Exception as e:
+        return JSONResponse(content={"status": "error", "message": str(e)}, status_code=500)
+
+def build_dashboard_data(logs):
+    return {
+        "status": "online",
+        "project": "Ephyphonic",
+        "owner": "Angelo Araya",
+        "retention": "7_days",
+        "total_logs": len(logs),
+        "last_events": [
+            f"{l['timestamp']} | Status: {l['status']} | {l['latency']}ms"
+            if l["timestamp"] else l["raw"]
+            for l in logs
+        ]
+    }
+
+def parse_log(raw: bytes):
+    raw_str = raw.decode("utf-8")
+
+    try:
+        parsed = json.loads(raw_str)
+        return {
+            "timestamp": parsed.get("timestamp"),
+            "status": parsed.get("status"),
+            "latency": parsed.get("latency"),
+            "raw": raw_str
+        }
+    except:
+        try:
+            parts = raw_str.split("|")
+            return {
+                "timestamp": parts[0].strip(),
+                "status": int(parts[1].split(":")[1].strip()),
+                "latency": float(parts[2].replace("ms", "").strip()),
+                "raw": raw_str
+            }
+        except:
+            return {
+                "timestamp": None,
+                "status": None,
+                "latency": None,
+                "raw": raw_str
+            }
+        
+def apply_filters(log, filters):
+    # If no filters, include every log
+    if not filters:
+        return True
+
+    level = filters.get("level")
+    status_filter = filters.get("status")
+    slow = filters.get("latencyGt")
+    date_from = filters.get("dateFrom")
+
+    # Filter by error level all bigger than or equal to 400
+    if level == "error":
+        if log["status"] is None or log["status"] < 400:
+            return False
+
+    # Filter by exact status if provided
+    if status_filter is not None:
+        if log["status"] != status_filter:
+            return False
+
+    # Filter by latency greater than specified
+    if slow is not None:
+        if log["latency"] is None or log["latency"] >= slow:
+            return False
+    
+    # Filter by date
+    if date_from:
+        try:
+            log_date = datetime.strptime(log["timestamp"], "%Y-%m-%d %H:%M:%S")
+            filter_date = datetime.strptime(date_from, "%Y-%m-%d")
+            if log_date < filter_date:
+                return False
+        except Exception:
+            # If timestamp is missing or invalid, exclude the log
+            return False
+
+    # If all filters pass, we include the log
+    return True
+
+def render_dashboard(logs_decoded, data, filters):
+    log_items = ""
+
+    for log in logs_decoded:
+        if log["timestamp"]:
+            display = f"{log['timestamp']} | Status: {log['status']} | {log['latency']}ms"
+            status_code = log["status"]
+        else:
+            display = log["raw"]
+            status_code = None
+
+        color = "text-blue-300"
+
+        if status_code and status_code >= 500:
+            color = "text-red-400"
+        elif status_code and status_code >= 400:
+            color = "text-yellow-400"
+
+        log_items += f"<li class='border-b border-slate-700 py-2 font-mono text-sm {color}'>{display}</li>"
+    
+    status_val = filters.get("status") or ""
+    level_val = filters.get("level") or ""
+    latency_val = filters.get("latencyGt") or ""
+    date_from_val = filters.get("dateFrom") or ""
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
         <head>
             <title>Ephyphonic Dashboard</title>
             <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -105,6 +191,57 @@ def get_status(request: Request):
                         <span class="px-3 py-1 bg-emerald-500/20 text-emerald-400 rounded-full text-sm border border-emerald-500/50">System Online</span>
                     </div>
                 </header>
+
+                <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 mb-6">
+                    <form id="searchForm" class="flex flex-wrap gap-4 items-end">
+                        <div>
+                            <label class="text-slate-400 text-xs">Status</label>
+                            <input type="number" name="status" placeholder="200" value="{status_val}" class="px-2 py-1 rounded border border-slate-600 bg-slate-900 text-white text-sm">
+                        </div>
+                        <div>
+                            <label class="text-slate-400 text-xs">Level</label>
+                            <select name="level" class="px-2 py-1 rounded border border-slate-600 bg-slate-900 text-white text-sm">
+                                <option value="" {"selected" if level_val=="" else ""}>Any</option>
+                                <option value="error" {"selected" if level_val=="error" else ""}>Error (>=400)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-slate-400 text-xs">Min Latency (ms)</label>
+                            <input type="number" name="latencyGt" placeholder="100" value="{latency_val}" class="px-2 py-1 rounded border border-slate-600 bg-slate-900 text-white text-sm">
+                        </div>
+                        <div>
+                            <label class="text-slate-400 text-xs">Date From</label>
+                            <input type="date" name="dateFrom" value="{date_from_val}" class="px-2 py-1 rounded border border-slate-600 bg-slate-900 text-white text-sm">
+                        </div>
+                        <div>
+                            <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-colors">
+                                🔍 Search
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <script>
+                document.getElementById('searchForm').addEventListener('submit', async (e) => {{
+                    e.preventDefault();
+                    const form = e.target;
+                    const formData = new FormData(form);
+                    const filters = Object.fromEntries(formData.entries());
+
+                    if(filters.status) filters.status = parseInt(filters.status);
+                    if(filters.latencyGt) filters.latencyGt = parseFloat(filters.latencyGt);
+
+                    const response = await fetch('/api', {{
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json', 'Accept': 'text/html'},
+                        body: JSON.stringify({{filters}})
+                    }});
+                    const html = await response.text();
+                    document.open();
+                    document.write(html);
+                    document.close();
+                }});
+                </script>
 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                     <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
@@ -135,13 +272,11 @@ def get_status(request: Request):
                 </footer>
             </div>
         </body>
-        </html>
-        """
-        return HTMLResponse(content=html_content)
+    </html>
+    """
+    return html_content
 
-    except Exception as e:
-        return JSONResponse(content={"status": "error", "message": str(e)}, status_code=500)
-    
+
 @app.get("/api/worker")
 def do_worker(request: Request):
     if r is None:
