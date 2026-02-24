@@ -170,6 +170,9 @@ def render_dashboard(logs_decoded, data, filters):
     latency_val = filters.get("latencyGt") or ""
     date_from_val = filters.get("dateFrom") or ""
 
+    level_any_selected = "selected" if level_val == "" else ""
+    level_error_selected = "selected" if level_val == "error" else ""
+
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -201,8 +204,8 @@ def render_dashboard(logs_decoded, data, filters):
                         <div>
                             <label class="text-slate-400 text-xs">Level</label>
                             <select name="level" class="px-2 py-1 rounded border border-slate-600 bg-slate-900 text-white text-sm">
-                                <option value="" {"selected" if level_val=="" else ""}>Any</option>
-                                <option value="error" {"selected" if level_val=="error" else ""}>Error (>=400)</option>
+                                <option value="" {level_any_selected}>Any</option>
+                                <option value="error" {level_error_selected}>Error (>=400)</option>
                             </select>
                         </div>
                         <div>
