@@ -37,17 +37,17 @@ def favicon():
 @app.get("/api")
 async def get_status(request: Request):
 
-    filters = {
-        "status": request.query_params.get("status"),
-        "level": request.query_params.get("level"),
-        "latencyGt": request.query_params.get("latencyGt"),
-        "dateFrom": request.query_params.get("dateFrom")
-    }
+    filters = {}
 
-    if filters["status"]:
-        filters["status"] = int(filters["status"])
-    if filters["latencyGt"]:
-        filters["latencyGt"] = float(filters["latencyGt"]) 
+    params = request.query_params
+    if "status" in params and params["status"]:
+        filters["status"] = int(params["status"])
+    if "latencyGt" in params and params["latencyGt"]:
+        filters["latencyGt"] = float(params["latencyGt"])
+    if "level" in params and params["level"]:
+        filters["level"] = params["level"]
+    if "dateFrom" in params and params["dateFrom"]:
+        filters["dateFrom"] = params["dateFrom"]
     
     try:
         logs = r.zrevrange("orchestrator_telemetry", 0, -1)
@@ -140,12 +140,15 @@ def apply_filters(log, filters):
     # Filter by date
     if date_from:
         try:
-            log_date = datetime.strptime(log["timestamp"], "%Y-%m-%d %H:%M:%S")
             filter_date = datetime.strptime(date_from, "%Y-%m-%d")
+        except ValueError:
+            filter_date = datetime.strptime(date_from, "%m/%d/%Y")
+        
+        try:
+            log_date = datetime.strptime(log["timestamp"], "%Y-%m-%d %H:%M:%S")
             if log_date < filter_date:
                 return False
         except Exception:
-            # If timestamp is missing or invalid, exclude the log
             return False
 
     # If all filters pass, we include the log
@@ -223,7 +226,7 @@ def render_dashboard(logs_decoded, data, filters):
                         </div>
                         <div>
                             <label class="text-slate-400 text-xs">Date From</label>
-                            <input type="date" name="dateFrom" value="{date_from_val}" class="px-2 py-1 rounded border border-slate-600 bg-slate-900 text-white text-sm">
+                            <input type="date" name="dateFrom" value="{date_from_val}" pattern="\d{4}-\d{2}-\d{2}" class="w-full px-2 py-1 rounded border border-slate-600 bg-slate-900 text-white text-sm appearance-none focus:outline-none focus:ring-1 focus:ring-blue-400">
                         </div>
                         <div>
                             <button class="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-emerald-400 px-4 py-2 rounded-xl border border-emerald-500/50 text-sm font-medium transition-colors transition-transform hover:scale-105 active:scale-95 shadow-sm">
