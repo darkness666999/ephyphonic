@@ -34,7 +34,7 @@ def read_root():
 def favicon():
     return FileResponse("api/ephyphonic.svg", media_type="image/svg+xml")
 
-@app.get("/api", methods=["GET", "POST"])
+@app.api_route("/api", methods=["GET", "POST"])
 async def get_status(request: Request):
 
     filters = {}
