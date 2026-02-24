@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+import json
 import os
 import redis
 import time
@@ -37,7 +38,19 @@ def favicon():
 def get_status(request: Request):
     try:
         logs = r.zrevrange("orchestrator_telemetry", 0, -1)
-        logs_decoded = [log.decode('utf-8') for log in logs]
+        logs_decoded = []
+
+        for raw in logs:
+            raw = raw.decode("utf-8")
+
+            try:
+                parsed = json.loads(raw)
+                logs_decoded.append(parsed)
+            except:
+                logs_decoded.append({
+                    "legacy": True,
+                    "raw": raw
+        })
         
         data = {
             "status": "online",
@@ -52,7 +65,24 @@ def get_status(request: Request):
         if "text/html" not in accept:
             return JSONResponse(content=data)
 
-        log_items = "".join([f"<li class='border-b border-slate-700 py-2 font-mono text-sm text-blue-300'>{log}</li>" for log in logs_decoded])
+        log_items = ""
+
+        for log in logs_decoded:
+            if "legacy" in log:
+                display = log["raw"]
+                status_code = None
+            else:
+                display = f"{log['timestamp']} | Status: {log['status']} | {log['latency']}ms"
+                status_code = log["status"]
+
+            color = "text-blue-300"
+
+            if status_code and status_code >= 500:
+                color = "text-red-400"
+            elif status_code and status_code >= 400:
+                color = "text-yellow-400"
+
+            log_items += f"<li class='border-b border-slate-700 py-2 font-mono text-sm {color}'>{display}</li>"
         
         html_content = f"""
         <!DOCTYPE html>
@@ -129,8 +159,13 @@ def do_worker(request: Request):
         now_ts = time.time()
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         log_msg = f"{now_str} | Status: {response.status_code} | {latency}ms"
-        
-        r.zadd("orchestrator_telemetry", {log_msg: now_ts})
+        log_entry = {
+            "timestamp": now_str,
+            "status": response.status_code,
+            "latency": latency
+        }
+
+        r.zadd("orchestrator_telemetry", {json.dumps(log_entry): now_ts})
         
         week_ago = now_ts - (7 * 24 * 60 * 60)
         num_del = r.zremrangebyscore("orchestrator_telemetry", "-inf", week_ago)
