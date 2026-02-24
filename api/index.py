@@ -229,10 +229,18 @@ def render_dashboard(logs_decoded, data, filters):
                     e.preventDefault();
                     const form = e.target;
                     const formData = new FormData(form);
-                    const filters = Object.fromEntries(formData.entries());
+                    let filters = Object.fromEntries(formData.entries());
 
-                    if(filters.status) filters.status = parseInt(filters.status);
-                    if(filters.latencyGt) filters.latencyGt = parseFloat(filters.latencyGt);
+                    filters = Object.fromEntries(
+                        Object.entries(filters)
+                            .filter(([_, v]) => v !== "")
+                            .map(([k, v]) => [
+                                k,
+                                (k === "status") ? parseInt(v) :
+                                (k === "latencyGt") ? parseFloat(v) :
+                                v
+                            ])
+                    );
 
                     const response = await fetch('/api', {{{{
                         method: 'POST',
