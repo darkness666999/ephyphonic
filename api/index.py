@@ -34,14 +34,20 @@ def read_root():
 def favicon():
     return FileResponse("api/ephyphonic.svg", media_type="image/svg+xml")
 
-@app.api_route("/api", methods=["GET", "POST"])
+@app.get("/api")
 async def get_status(request: Request):
 
-    filters = {}
+    filters = {
+        "status": request.query_params.get("status"),
+        "level": request.query_params.get("level"),
+        "latencyGt": request.query_params.get("latencyGt"),
+        "dateFrom": request.query_params.get("dateFrom")
+    }
 
-    if request.method == "POST":
-        body = await request.json()
-        filters = body.get("filters", {})
+    if filters["status"]:
+        filters["status"] = int(filters["status"])
+    if filters["latencyGt"]:
+        filters["latencyGt"] = float(filters["latencyGt"]) 
     
     try:
         logs = r.zrevrange("orchestrator_telemetry", 0, -1)
@@ -188,15 +194,18 @@ def render_dashboard(logs_decoded, data, filters):
                         Ephyphonic Orchestrator
                     </h1>
                     <div class="flex items-center gap-4">
-                        <a href="/api/worker" class="text-xs bg-blue-600 hover:bg-blue-500 text-white py-1.5 px-3 rounded-lg transition-colors font-medium">
-                            ▶ Run Worker
+                        <a href="/api/worker" class="flex items-center gap-2 text-xs px-3 py-1.5 rounded-xl border border-emerald-500/50 bg-slate-700 hover:bg-slate-600 text-emerald-400 font-medium transition-all shadow-sm shadow-emerald-500/30">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 stroke-emerald-400" fill="none" viewBox="0 0 24 24" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M12 5l7 7-7 7"/>
+                            </svg>
+                            Run Worker
                         </a>
                         <span class="px-3 py-1 bg-emerald-500/20 text-emerald-400 rounded-full text-sm border border-emerald-500/50">System Online</span>
                     </div>
                 </header>
 
                 <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 mb-6">
-                    <form id="searchForm" class="flex flex-wrap gap-4 items-end">
+                    <form id="searchForm" method="GET" action="/api" class="flex flex-wrap gap-4 items-end">
                         <div>
                             <label class="text-slate-400 text-xs">Status</label>
                             <input type="number" name="status" placeholder="200" value="{status_val}" class="px-2 py-1 rounded border border-slate-600 bg-slate-900 text-white text-sm">
@@ -217,42 +226,16 @@ def render_dashboard(logs_decoded, data, filters):
                             <input type="date" name="dateFrom" value="{date_from_val}" class="px-2 py-1 rounded border border-slate-600 bg-slate-900 text-white text-sm">
                         </div>
                         <div>
-                            <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-colors">
-                                🔍 Search
+                            <button class="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-emerald-400 px-4 py-2 rounded-xl border border-emerald-500/50 text-sm font-medium transition-colors transition-transform hover:scale-105 active:scale-95 shadow-sm">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 stroke-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                                    <path d="M10 18a8 8 0 100-16 8 8 0 000 16z" />
+                                    <path d="M15 15l5 5" />
+                                </svg>
+                                Search
                             </button>
                         </div>
                     </form>
                 </div>
-
-                <script>
-                document.getElementById('searchForm').addEventListener('submit', async (e) => {{
-                    e.preventDefault();
-                    const form = e.target;
-                    const formData = new FormData(form);
-                    let filters = Object.fromEntries(formData.entries());
-
-                    filters = Object.fromEntries(
-                        Object.entries(filters)
-                            .filter(([_, v]) => v !== "")
-                            .map(([k, v]) => [
-                                k,
-                                (k === "status") ? parseInt(v) :
-                                (k === "latencyGt") ? parseFloat(v) :
-                                v
-                            ])
-                    );
-
-                    const response = await fetch('/api', {{{{
-                        method: 'POST',
-                        headers: {{{{'Content-Type': 'application/json', 'Accept': 'text/html'}}}},
-                        body: JSON.stringify({{{{filters}}}})
-                    }}}});
-                    const html = await response.text();
-                    document.open();
-                    document.write(html);
-                    document.close();
-                }});
-                </script>
 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                     <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
