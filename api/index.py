@@ -1,5 +1,3 @@
-from warnings import filters
-
 from fastapi import FastAPI, Request, Query
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 import json
