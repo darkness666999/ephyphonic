@@ -210,8 +210,6 @@ def render_dashboard(logs_decoded, data, filters):
                 theme: "dark",       
                 allowInput: true   
             }});
-            </script>
-            <script>
             flatpickr("#dateTo", {{
                 dateFormat: "Y-m-d",
                 theme: "dark",
