@@ -201,19 +201,37 @@ def render_dashboard(logs_decoded, data, filters):
             <title>Ephyphonic Dashboard</title>
             <link rel="icon" type="image/svg+xml" href="/favicon.svg">            
             <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
+            <style>
+            .flatpickr-calendar {{
+                background: #1e293b; /* slate-800 */
+                border: 1px solid #334155; /* slate-700 */
+                color: #e2e8f0; /* slate-200 */
+            }}
+            .flatpickr-months {{
+                background: #0f172a; /* slate-900 */
+                border-bottom: 1px solid #334155;
+            }}
+            .flatpickr-day {{
+                color: #e2e8f0;
+            }}
+            .flatpickr-day:hover {{
+                background: #334155; /* slate-700 */
+            }}
+            .flatpickr-day.selected {{
+                background: #10b981; /* emerald-500 */
+                border-color: #10b981;
+                color: white;
+            }}
+            .flatpickr-day.today {{
+                border-color: #38bdf8; /* blue-400 */
+            }}
+            </style>
             <script src="https://cdn.tailwindcss.com"></script>
             <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
             <script>
-            flatpickr("#dateFrom", {{
-                dateFormat: "Y-m-d", 
-                theme: "dark",       
-                allowInput: true   
-            }});
-            flatpickr("#dateTo", {{
-                dateFormat: "Y-m-d",
-                theme: "dark",
-                allowInput: true
+            document.addEventListener("DOMContentLoaded", function () {{
+                flatpickr("#dateFrom", {{ dateFormat: "Y-m-d", allowInput: true }});
+                flatpickr("#dateTo", {{ dateFormat: "Y-m-d", allowInput: true }});
             }});
             </script>
         </head>
