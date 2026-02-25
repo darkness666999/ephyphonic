@@ -142,25 +142,25 @@ def apply_filters(log, filters):
     
     # Filter by date
     if date_from or date_to:
-    try:
-        if date_from:
-            filter_date_from = datetime.strptime(date_from, "%Y-%m-%d")
-        else:
-            filter_date_from = None
+        try:
+            if date_from:
+                filter_date_from = datetime.strptime(date_from, "%Y-%m-%d")
+            else:
+                filter_date_from = None
 
-        if date_to:
-            filter_date_to = datetime.strptime(date_to, "%Y-%m-%d")
-        else:
-            filter_date_to = None
+            if date_to:
+                filter_date_to = datetime.strptime(date_to, "%Y-%m-%d")
+            else:
+                filter_date_to = None
 
-        log_date = datetime.strptime(log["timestamp"], "%Y-%m-%d %H:%M:%S")
-        
-        if filter_date_from and log_date < filter_date_from:
+            log_date = datetime.strptime(log["timestamp"], "%Y-%m-%d %H:%M:%S")
+            
+            if filter_date_from and log_date < filter_date_from:
+                return False
+            if filter_date_to and log_date > filter_date_to:
+                return False
+        except Exception:
             return False
-        if filter_date_to and log_date > filter_date_to:
-            return False
-    except Exception:
-        return False
 
     # If all filters pass, we include the log
     return True
