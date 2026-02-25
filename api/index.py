@@ -1,3 +1,5 @@
+from warnings import filters
+
 from fastapi import FastAPI, Request, Query
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 import json
@@ -48,6 +50,8 @@ async def get_status(request: Request):
         filters["level"] = params["level"]
     if "dateFrom" in params and params["dateFrom"]:
         filters["dateFrom"] = params["dateFrom"]
+    if "dateTo" in params and params["dateTo"]:
+        filters["dateTo"] = params["dateTo"]
     
     try:
         logs = r.zrevrange("orchestrator_telemetry", 0, -1)
@@ -121,6 +125,7 @@ def apply_filters(log, filters):
     status_filter = filters.get("status")
     slow = filters.get("latencyGt")
     date_from = filters.get("dateFrom")
+    date_to = filters.get("dateTo")
 
     # Filter by error level all bigger than or equal to 400
     if level == "error":
@@ -134,22 +139,30 @@ def apply_filters(log, filters):
 
     # Filter by latency greater than specified
     if slow is not None:
-        if log["latency"] is None or log["latency"] >= slow:
+        if log["latency"] is None or log["latency"] <= slow:
             return False
     
     # Filter by date
-    if date_from:
-        try:
-            filter_date = datetime.strptime(date_from, "%Y-%m-%d")
-        except ValueError:
-            filter_date = datetime.strptime(date_from, "%m/%d/%Y")
+    if date_from or date_to:
+    try:
+        if date_from:
+            filter_date_from = datetime.strptime(date_from, "%Y-%m-%d")
+        else:
+            filter_date_from = None
+
+        if date_to:
+            filter_date_to = datetime.strptime(date_to, "%Y-%m-%d")
+        else:
+            filter_date_to = None
+
+        log_date = datetime.strptime(log["timestamp"], "%Y-%m-%d %H:%M:%S")
         
-        try:
-            log_date = datetime.strptime(log["timestamp"], "%Y-%m-%d %H:%M:%S")
-            if log_date < filter_date:
-                return False
-        except Exception:
+        if filter_date_from and log_date < filter_date_from:
             return False
+        if filter_date_to and log_date > filter_date_to:
+            return False
+    except Exception:
+        return False
 
     # If all filters pass, we include the log
     return True
@@ -178,6 +191,7 @@ def render_dashboard(logs_decoded, data, filters):
     level_val = filters.get("level") or ""
     latency_val = filters.get("latencyGt") or ""
     date_from_val = filters.get("dateFrom") or ""
+    date_to_val = filters.get("dateTo") or ""
 
     level_any_selected = "selected" if level_val == "" else ""
     level_error_selected = "selected" if level_val == "error" else ""
@@ -187,8 +201,25 @@ def render_dashboard(logs_decoded, data, filters):
     <html>
         <head>
             <title>Ephyphonic Dashboard</title>
-            <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+            <link rel="icon" type="image/svg+xml" href="/favicon.svg">            
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
             <script src="https://cdn.tailwindcss.com"></script>
+            <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+            <script>
+            flatpickr("#dateFrom", {{
+                dateFormat: "Y-m-d", 
+                theme: "dark",       
+                allowInput: true   
+            }});
+            </script>
+            <script>
+            flatpickr("#dateTo", {{
+                dateFormat: "Y-m-d",
+                theme: "dark",
+                allowInput: true
+            }});
+            </script>
         </head>
         <body class="bg-slate-900 text-slate-200 min-h-screen p-8">
             <div class="max-w-4xl mx-auto">
@@ -226,7 +257,17 @@ def render_dashboard(logs_decoded, data, filters):
                         </div>
                         <div>
                             <label class="text-slate-400 text-xs">Date From</label>
-                            <input type="date" name="dateFrom" value="{date_from_val}" pattern="\d{4}-\d{2}-\d{2}" class="w-full px-2 py-1 rounded border border-slate-600 bg-slate-900 text-white text-sm appearance-none focus:outline-none focus:ring-1 focus:ring-blue-400">
+                            <input id="dateFrom" name="dateFrom" 
+                                value="{date_from_val}" 
+                                placeholder="YYYY-MM-DD"
+                                class="w-full px-2 py-1 rounded border border-slate-600 bg-slate-900 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+                        </div>
+                        <div>
+                            <label class="text-slate-400 text-xs">Date To</label>
+                            <input id="dateTo" name="dateTo"
+                                value="{date_to_val}"
+                                placeholder="YYYY-MM-DD"
+                                class="w-full px-2 py-1 rounded border border-slate-600 bg-slate-900 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
                         </div>
                         <div>
                             <button class="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-emerald-400 px-4 py-2 rounded-xl border border-emerald-500/50 text-sm font-medium transition-colors transition-transform hover:scale-105 active:scale-95 shadow-sm">
