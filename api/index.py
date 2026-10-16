@@ -9,8 +9,30 @@ from datetime import datetime
 
 app = FastAPI()
 
-REDIS_URL = os.getenv("REDIS_URL")
-r = redis.from_url(REDIS_URL)
+# Lazy Redis init: avoid calling redis.from_url at import time (which can raise if env var missing)
+# This ensures the module can be imported by Vercel to discover the `app` instance even when
+# REDIS_URL is not set in the build environment.
+r = None
+
+
+def get_redis():
+    """Return a redis client instance or None if REDIS_URL is not configured or initialization fails."""
+    global r
+    if r is not None:
+        return r
+
+    redis_url = os.getenv("REDIS_URL")
+    if not redis_url:
+        return None
+
+    try:
+        r = redis.from_url(redis_url)
+        return r
+    except Exception:
+        # Don't raise during import/build — fail gracefully at runtime and let endpoints handle the missing Redis.
+        r = None
+        return None
+
 
 @app.get("/", response_class=HTMLResponse)
 def read_root():
@@ -30,9 +52,11 @@ def read_root():
     </html>
     """
 
+
 @app.get("/favicon.svg", include_in_schema=False)
 def favicon():
     return FileResponse("api/ephyphonic.svg", media_type="image/svg+xml")
+
 
 @app.get("/api")
 async def get_status(request: Request):
@@ -52,7 +76,23 @@ async def get_status(request: Request):
         filters["dateTo"] = params["dateTo"]
     
     try:
-        logs = r.zrevrange("orchestrator_telemetry", 0, -1)
+        rc = get_redis()
+        if rc is None:
+            # Redis not configured — return an empty dashboard (or an error response if you prefer)
+            data = {
+                "status": "online",
+                "project": "Ephyphonic",
+                "owner": "Angelo Araya",
+                "retention": "7_days",
+                "total_logs": 0,
+                "last_events": []
+            }
+            accept = request.headers.get("accept", "")
+            if "text/html" not in accept:
+                return JSONResponse(content=data)
+            return HTMLResponse(content=render_dashboard([], data, filters))
+
+        logs = rc.zrevrange("orchestrator_telemetry", 0, -1)
         logs_decoded = []
 
         for raw in logs:
@@ -72,6 +112,7 @@ async def get_status(request: Request):
     except Exception as e:
         return JSONResponse(content={"status": "error", "message": str(e)}, status_code=500)
 
+
 def build_dashboard_data(logs):
     return {
         "status": "online",
@@ -85,6 +126,7 @@ def build_dashboard_data(logs):
             for l in logs
         ]
     }
+
 
 def parse_log(raw: bytes):
     raw_str = raw.decode("utf-8")
@@ -114,6 +156,7 @@ def parse_log(raw: bytes):
                 "raw": raw_str
             }
         
+
 def apply_filters(log, filters):
     # If no filters, include every log
     if not filters:
@@ -164,6 +207,7 @@ def apply_filters(log, filters):
 
     # If all filters pass, we include the log
     return True
+
 
 def render_dashboard(logs_decoded, data, filters):
     log_items = ""
@@ -242,7 +286,7 @@ def render_dashboard(logs_decoded, data, filters):
                         Ephyphonic Orchestrator
                     </h1>
                     <div class="flex items-center gap-4">
-                        <a href="/api/worker" class="flex items-center gap-2 text-xs px-3 py-1.5 rounded-xl border border-emerald-500/50 bg-slate-700 hover:bg-slate-600 text-emerald-400 font-medium transition-all shadow-sm shadow-emerald-500/30">
+                        <a href="/api/worker" class="flex items-center gap-2 text-xs px-3 py-1.5 rounded-xl border border-emerald-500/50 bg-slate-700 hover:bg-slate-600 text-emerald-400 font-medium tr[...]"
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 stroke-emerald-400" fill="none" viewBox="0 0 24 24" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M12 5l7 7-7 7"/>
                             </svg>
@@ -284,7 +328,7 @@ def render_dashboard(logs_decoded, data, filters):
                                 class="w-full px-2 py-1 rounded border border-slate-600 bg-slate-900 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
                         </div>
                         <div>
-                            <button class="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-emerald-400 px-4 py-2 rounded-xl border border-emerald-500/50 text-sm font-medium transition-colors transition-transform hover:scale-105 active:scale-95 shadow-sm">
+                            <button class="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-emerald-400 px-4 py-2 rounded-xl border border-emerald-500/50 text-sm font-medium transition-col[...]"
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 stroke-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
                                     <path d="M10 18a8 8 0 100-16 8 8 0 000 16z" />
                                     <path d="M15 15l5 5" />
@@ -331,7 +375,8 @@ def render_dashboard(logs_decoded, data, filters):
 
 @app.get("/api/worker")
 def do_worker(request: Request):
-    if r is None:
+    rc = get_redis()
+    if rc is None:
         return JSONResponse(content={"status": "error", "message": "Redis not initialized."}, status_code=500)
     
     target = os.getenv("TARGET_URL")
@@ -352,10 +397,10 @@ def do_worker(request: Request):
             "latency": latency
         }
 
-        r.zadd("orchestrator_telemetry", {json.dumps(log_entry): now_ts})
+        rc.zadd("orchestrator_telemetry", {json.dumps(log_entry): now_ts})
         
         week_ago = now_ts - (7 * 24 * 60 * 60)
-        num_del = r.zremrangebyscore("orchestrator_telemetry", "-inf", week_ago)
+        num_del = rc.zremrangebyscore("orchestrator_telemetry", "-inf", week_ago)
 
         accept = request.headers.get("accept", "")
         if "text/html" in accept:
@@ -394,3 +439,4 @@ def do_worker(request: Request):
         }
 
     except Exception as e:
+        return JSONResponse(content={"status": "error", "message": str(e)}, status_code=500)
