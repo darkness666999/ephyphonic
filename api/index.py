@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Query, BackgroundTasks  
+from fastapi import FastAPI, Request, Query  
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 import json
 import os
@@ -394,56 +394,3 @@ def do_worker(request: Request):
         }
 
     except Exception as e:
-
-
-def async_esp32_ping_task(target_url):
-    try:
-        start_time = time.time()
-        response = requests.get(target_url, timeout=10)
-        latency = round((time.time() - start_time) * 1000, 2)
-        
-        now_ts = time.time()
-        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
-        log_entry = {
-            "timestamp": now_str,
-            "status": response.status_code,
-            "latency": latency
-        }
-
-        r.zadd("orchestrator_telemetry", {json.dumps(log_entry): now_ts})
-        
-        week_ago = now_ts - (7 * 24 * 60 * 60)
-        r.zremrangebyscore("orchestrator_telemetry", "-inf", week_ago)
-        
-    except Exception as e:
-        error_entry = {
-            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            "status": 500,
-            "latency": 0.00,
-            "error": str(e)
-        }
-        r.zadd("orchestrator_telemetry", {json.dumps(error_entry): time.time()})
-
-@app.get("/api/esp-worker")
-async def do_esp_worker(background_tasks: BackgroundTasks):
-    if r is None:
-        return JSONResponse(content={"status": "error", "message": "Redis not initialized."}, status_code=500)
-    
-    target = os.getenv("TARGET_URL")
-    if not target:
-        return JSONResponse(content={"status": "error", "message": "TARGET_URL not configured."}, status_code=500)
-    
-    try:
-        background_tasks.add_task(async_esp32_ping_task, target)
-
-        return JSONResponse(
-            content={
-                "status": "success",
-                "message": "ESP32 trigger accepted. Task executing in background."
-            },
-            status_code=200
-        )
-    except Exception as e:
-        return JSONResponse(content={"status": "error", "message": str(e)}, status_code=500)
-        return JSONResponse(content={"status": "error", "message": str(e)}, status_code=500)
